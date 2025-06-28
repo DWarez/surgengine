@@ -1,6 +1,7 @@
 Roadmap:
 
 - [x] Create a dummy Rest API server
+- [ ] Un-mock default routes
 - [ ] Data types?
 - [ ] Implement basic functional operations using cuBLAS (support cpu only with BLAS?)
 - [ ] CUDA utilities

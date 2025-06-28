@@ -12,7 +12,6 @@
 #include <boost/beast/version.hpp>
 #include <boost/config.hpp>
 #include <iostream>
-#include <iterator>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <server/request_handler.hpp>
