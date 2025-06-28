@@ -1,6 +1,7 @@
 Roadmap:
 
-- [ ] Create a dummy Rest API server
+- [x] Create a dummy Rest API server
+- [ ] Data types?
 - [ ] Implement basic functional operations using cuBLAS (support cpu only with BLAS?)
 - [ ] CUDA utilities
 - [ ] Implement namespace and modules (equivalent to torch.nn)
