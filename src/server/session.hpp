@@ -1,4 +1,5 @@
 #include <boost/asio/basic_socket_acceptor.hpp>
+#include <boost/asio/error.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/socket_base.hpp>
@@ -11,6 +12,7 @@
 #include <boost/beast/version.hpp>
 #include <boost/config.hpp>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <server/request_handler.hpp>
@@ -41,8 +43,14 @@ private:
                        if (!ec) {
                          do_write(handler_->handle_request(request_));
                        } else {
-                         std::cerr << "Read error: " << ec.message()
-                                   << std::endl;
+                         if (ec == beast::http::error::end_of_stream) {
+                           return;
+                         } else if (ec == net::error::operation_aborted) {
+                           return;
+                         } else {
+                           std::cerr << "Read error: " << ec.message()
+                                     << std::endl;
+                         }
                        }
                      });
   }

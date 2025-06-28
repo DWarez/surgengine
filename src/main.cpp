@@ -18,54 +18,56 @@ int main() {
   std::cout << "Starting Surgengine server..." << std::endl;
 
   try {
+    // Create server on port 8080
     Server server(8080);
 
     if (!server.is_initialized()) {
       std::cerr << "Failed to initialize server" << std::endl;
-      return -1;
+      return 1;
     }
 
+    // Optionally add custom business logic routes
     server.routes()
-        .route(http::verb::get, "/api/inference",
-               [](const auto &req) {
-                 return json{{"message", "Inference endpoint"},
-                             {"available_models",
-                              json::array({"gpt", "bert", "resnet"})}};
-               })
-        .route(http::verb::post, "/api/inference",
+        .route(http::verb::post, "/api/v1/inference/batch",
                [](const auto &req) {
                  auto input = json::parse(req.body());
+                 auto batch_items = input.value("batch", json::array());
 
-                 // Simulate inference processing
-                 std::string model = input.value("model", "default");
-                 auto data = input.value("data", "");
-
-                 return json{{"result", "inference_complete"},
-                             {"model_used", model},
-                             {"processed_data", data},
-                             {"confidence", 0.95}};
-               })
-        .route(http::verb::get, "/api/models",
-               [](const auto &req) {
                  return json{
-                     {"models", json::array({{{"name", "gpt"},
-                                              {"type", "language"},
-                                              {"status", "ready"}},
-                                             {{"name", "bert"},
-                                              {"type", "embedding"},
-                                              {"status", "ready"}},
-                                             {{"name", "resnet"},
-                                              {"type", "vision"},
-                                              {"status", "loading"}}})}};
+                     {"job_id", "batch_" + std::to_string(std::time(nullptr))},
+                     {"status", "processing"},
+                     {"batch_size", batch_items.size()},
+                     {"estimated_completion", std::time(nullptr) + 60},
+                     {"message", "Batch inference job queued"}};
                })
-        .route(http::verb::post, "/api/models/load", [](const auto &req) {
-          auto request_data = json::parse(req.body());
-          std::string model_name = request_data.value("model", "unknown");
-
-          return json{{"message", "Loading model: " + model_name},
-                      {"estimated_time", "30 seconds"}};
+        .route(http::verb::get, "/api/v1/jobs/{id}", [](const auto &req) {
+          // In a real implementation, you'd extract the {id} from the path
+          return json{{"job_id", "job_12345"},
+                      {"status", "completed"},
+                      {"progress", 100},
+                      {"result_url", "/api/v1/results/job_12345"},
+                      {"created_at", std::time(nullptr) - 120},
+                      {"completed_at", std::time(nullptr)}};
         });
 
+    std::cout << "\n🚀 Surgengine server is ready!" << std::endl;
+    std::cout << "📋 Available endpoints:" << std::endl;
+    std::cout << "   GET  http://localhost:8080/          - API overview"
+              << std::endl;
+    std::cout << "   GET  http://localhost:8080/heartbeat - Liveness check"
+              << std::endl;
+    std::cout << "   GET  http://localhost:8080/health    - Health status"
+              << std::endl;
+    std::cout << "   GET  http://localhost:8080/ready     - Readiness check"
+              << std::endl;
+    std::cout << "   GET  http://localhost:8080/metrics   - Performance metrics"
+              << std::endl;
+    std::cout << "   POST http://localhost:8080/api/v1/inference/predict - Run "
+                 "inference"
+              << std::endl;
+    std::cout << "\n" << std::endl;
+
+    // Start the server (this blocks)
     server.run();
 
   } catch (const std::exception &e) {
