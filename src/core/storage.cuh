@@ -5,8 +5,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cuda_runtime.h>
-#include <exception>
-#include <iterator>
 #include <memory>
 #include <stdexcept>
 #include <utils/cuda_utils.cuh>

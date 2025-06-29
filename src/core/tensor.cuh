@@ -1,7 +1,8 @@
 #pragma once
 
+#include <core/storage.cuh>
 #include <cstddef>
-#include <cstdio>
+#include <memory>
 #include <utils/cuda_utils.cuh>
 #include <vector>
 
@@ -13,69 +14,75 @@ enum class DataType {
   INT8,
 };
 
-enum class Device {
-  CPU,
-  CUDA,
-};
-
-template <typename T> class CudaPtr {
+template <typename T> class Tensor {
 private:
-  T *ptr_;
-  size_t size_;
+  std::vector<int> shape_;
+  std::vector<int> strides_;
+  std::unique_ptr<Storage> storage_;
 
-public:
-  CudaPtr() : ptr_(nullptr), size_(0) {}
+  void compute_strides() {
+    strides_.resize(shape_.size());
 
-  explicit CudaPtr(size_t count) : size_(count) {
-    CUDA_CHECK(cudaMalloc(&ptr_, count * sizeof(T)));
-  }
+    if (shape_.empty())
+      return;
 
-  ~CudaPtr() {
-    if (ptr_) {
-      cudaFree(ptr_);
+    strides_.back() = 1;
+
+    for (int i = shape_.size() - 2; i >= 0; --i) {
+      strides_[i] = strides_[i + 1] * shape_[i + 1];
     }
   }
 
-  CudaPtr(CudaPtr &&other) noexcept : ptr_(other.ptr_), size_(other.size_) {
-    other.size_ = 0;
-    other.ptr_ = nullptr;
+  size_t total_elements() const {
+    size_t total = 1;
+    for (int dim : shape_) {
+      total *= dim;
+    }
+    return total;
   }
 
-  CudaPtr &operator=(CudaPtr &&other) noexcept {
+public:
+  Tensor() = default;
+
+  Tensor(const std::vector<int> &shape, const Device &device = Device::cpu())
+      : shape_(shape) {
+    compute_strides();
+    storage_ = surgengine::make_storage<T>(total_elements(), device);
+  }
+
+  Tensor(const Tensor &other) : shape_(other.shape_), strides_(other.strides_) {
+    if (other.storage_)
+      storage_ = other.storage_->clone();
+  }
+
+  Tensor(Tensor &&other) noexcept
+      : shape_(std::move(other.shape_)), strides_(std::move(other.strides_)),
+        storage_(std::move(other.storage_)) {}
+
+  Tensor &operator=(const Tensor &other) {
     if (this != &other) {
-      if (ptr_)
-        cudaFree(ptr_);
-      ptr_ = other.ptr_;
-      size_ = other.size_;
-      other.size_ = 0;
-      other.ptr_ = nullptr;
+      shape_ = other.shape_;
+      strides_ = other.strides_;
+      storage_ = other.storage_ ? other.storage_->clone() : nullptr;
+    }
+    return this;
+  }
+
+  Tensor &operator=(Tensor &&other) noexcept {
+    if (this != &other) {
+      shape_ = std::move(other.shape_);
+      strides_ = std::move(other.strides_);
+      storage_ = std::move(other.storage_);
     }
     return *this;
   }
 
-  CudaPtr(const CudaPtr &) = delete;
-  CudaPtr &operator=(const CudaPtr &) = delete;
-
-  T *get() const { return ptr_; }
-  size_t size() const { return size_; }
-
-  void reset(size_t count = 0) {
-    if (ptr_) {
-      cudaFree(ptr_);
-      ptr_ = nullptr;
-      size_ = 0;
-    }
-    if (count > 0) {
-      CUDA_CHECK(cudaMalloc(&ptr_, count * sizeof(T)));
-      size_ = count;
-    }
+  const std::vector<int> &shape() const { return shape_; }
+  const std::vector<int> &strides() const { return strides_; }
+  int ndim() const { return shape_.size(); }
+  size_t numel() const { return total_elements(); }
+  Device device() const {
+    return storage_ ? storage_->device() : Device::cpu();
   }
-};
-
-template <typename T> class Tensor {
-private:
-  std::vector<int> shape_;
-  std::vector<int> strides;
-  CudaPtr<T> cuda_data_;
 };
 } // namespace surgengine
