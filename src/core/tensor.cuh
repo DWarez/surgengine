@@ -2,6 +2,7 @@
 
 #include <core/storage.cuh>
 #include <cstddef>
+#include <cuda_fp16.h>
 #include <memory>
 #include <utils/cuda_utils.cuh>
 #include <vector>
@@ -84,5 +85,109 @@ public:
   Device device() const {
     return storage_ ? storage_->device() : Device::cpu();
   }
+
+  const T *data() {
+    return storage_ ? static_cast<const T *>(storage_->data()) : nullptr;
+  }
+
+  const T *data() const {
+    return storage_ ? static_cast<const T *>(storage_->data()) : nullptr;
+  }
+
+  Tensor to(const Device &target_device) const {
+    if (!storage_ || storage_->device() == target_device)
+      return *this;
+
+    Tensor moved_tensor;
+    moved_tensor.shape_ = shape_;
+    moved_tensor.strides_ = strides_;
+    moved_tensor.storage_ = storage_->to_device(target_device);
+    return moved_tensor;
+  }
+
+  Tensor &to_(const Device &target_device) {
+    if (storage_ && storage_->device() != target_device) {
+      storage_ = storage_->to_device(target_device);
+    }
+    return *this;
+  }
+
+  Tensor cuda(int device_rank = 0) const {
+    return to(Device::cuda(device_rank));
+  }
+
+  Tensor cpu() const { return to(Device::cpu()); }
+
+  Tensor &cuda_(int device_rank = 0) { return to_(Device::cuda(device_rank)); }
+
+  Tensor &cpu_() { return to_(Device::cpu()); }
+
+  bool is_cuda() const { return device().is_cuda(); }
+  bool is_cpu() const { return device().is_cpu(); }
+
+  Tensor view(const std::vector<int> &new_shape) const {
+    size_t new_total = 1;
+    for (int dim : new_shape) {
+      new_total *= dim;
+    }
+
+    if (new_total != total_elements()) {
+      throw std::invalid_argument(
+          "Cannot reshape tensor: element count mismatch");
+    }
+
+    Tensor result = *this;
+    result.shape_ = new_shape;
+    result.compute_strides();
+    return result;
+  }
+
+  // Todo: to implement filling kernel
+  // void fill_(T value) {
+  //   if (!storage_)
+  //     return;
+
+  //   if (is_cuda()) {
+  //     launch_fill_kernel(data(), value, numel(), device().rank);
+  //   } else {
+  //     auto *cpu_storage = static_cast<CPUStorage<T> *>(storage_.get());
+  //     std::fill(cpu_storage->vector().begin(), cpu_storage->vector().end(),
+  //               value);
+  //   }
+  // }
+
+  void zero_() {
+    if (!storage_)
+      return;
+
+    if (is_cuda()) {
+      cudaSetDevice(device().rank);
+      cudaMemset(data(), 0, storage_->size_bytes());
+    } else {
+      auto *cpu_storage = static_cast<CPUStorage<T> *>(storage_.get());
+      std::fill(cpu_storage->vector().begin(), cpu_storage->vector().end(),
+                T{0});
+    }
+  }
+
+  static Tensor zeros(const std::vector<int> &shape,
+                      const Device &device = Device::cpu()) {
+    Tensor tensor(shape, device);
+    tensor.zero_();
+    return tensor;
+  }
+
+  // Todo: enable when fill method is complete
+  // static Tensor ones(const std::vector<int> &shape,
+  //                    const Device &device = Device::cpu()) {
+  //   Tensor tensor(shape, device);
+  //   tensor.fill_(T{1});
+  //   return tensor;
+  // }
 };
+
+using FloatTensor = Tensor<float>;
+using HalfTensor = Tensor<half>;
+using IntTensor = Tensor<int32_t>;
+using Int8Tensor = Tensor<int8_t>;
 } // namespace surgengine
