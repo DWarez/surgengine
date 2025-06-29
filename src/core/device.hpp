@@ -10,7 +10,7 @@ struct Device {
   Device(DeviceType t = DeviceType::CPU, int rank = 0) : type(t), rank(rank) {}
 
   static Device cpu() { return Device(DeviceType::CPU, 0); }
-  static Device cuda() { return Device(DeviceType::CUDA, 0); }
+  static Device cuda(int rank = 0) { return Device(DeviceType::CUDA, rank); }
 
   bool operator==(const Device &other) const {
     return type == other.type && rank == other.rank;
