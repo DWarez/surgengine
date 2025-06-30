@@ -8,7 +8,7 @@ test_exe = executable('tensor_tests',
         gtest_dep,
         gtest_main_dep
     ],
-    cuda_args: ['-arch=sm_89']
+    cuda_args: ['-arch=sm_86']
 )
 
 # Register the test

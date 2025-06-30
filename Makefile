@@ -7,3 +7,6 @@ setup:
 compile:
 	meson compile -C ${BUILD_DIR}
 	cp ${BUILD_DIR}/compile_commands.json .
+
+test:
+	meson test -C ${BUILD_DIR}
