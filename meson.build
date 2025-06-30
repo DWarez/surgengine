@@ -4,6 +4,9 @@ project('surgengine', ['cpp', 'cuda'],
 
 
 json_dep = dependency('nlohmann_json', required: true)
+gtest_dep = dependency('gtest', required: true)
+gtest_main_dep = dependency('gtest_main', required: true)
+
 
 # Find CUDA toolkit
 cuda_dep = dependency('cuda', version : '>=10.0', required : true)
@@ -15,3 +18,4 @@ boost_dep = dependency('boost', modules: ['system', 'filesystem'], required: tru
 subdir('src')
 subdir('src/server')
 subdir('src/kernels')
+subdir('tests')
