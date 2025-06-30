@@ -1,3 +1,4 @@
+#include "core/device.hpp"
 #include <boost/asio/basic_socket_acceptor.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -10,70 +11,81 @@
 #include <boost/beast/http/string_body_fwd.hpp>
 #include <boost/beast/version.hpp>
 #include <boost/config.hpp>
+#include <core/tensor.cuh>
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <server/server.hpp>
+#include <vector>
 
 int main() {
-  std::cout << "Starting Surgengine server..." << std::endl;
-
-  try {
-    // Create server on port 8080
-    Server server(8080);
-
-    if (!server.is_initialized()) {
-      std::cerr << "Failed to initialize server" << std::endl;
-      return 1;
-    }
-
-    // Optionally add custom business logic routes
-    server.routes()
-        .route(http::verb::post, "/api/v1/inference/batch",
-               [](const auto &req) {
-                 auto input = json::parse(req.body());
-                 auto batch_items = input.value("batch", json::array());
-
-                 return json{
-                     {"job_id", "batch_" + std::to_string(std::time(nullptr))},
-                     {"status", "processing"},
-                     {"batch_size", batch_items.size()},
-                     {"estimated_completion", std::time(nullptr) + 60},
-                     {"message", "Batch inference job queued"}};
-               })
-        .route(http::verb::get, "/api/v1/jobs/{id}", [](const auto &req) {
-          // In a real implementation, you'd extract the {id} from the path
-          return json{{"job_id", "job_12345"},
-                      {"status", "completed"},
-                      {"progress", 100},
-                      {"result_url", "/api/v1/results/job_12345"},
-                      {"created_at", std::time(nullptr) - 120},
-                      {"completed_at", std::time(nullptr)}};
-        });
-
-    std::cout << "\n🚀 Surgengine server is ready!" << std::endl;
-    std::cout << "📋 Available endpoints:" << std::endl;
-    std::cout << "   GET  http://localhost:8080/          - API overview"
-              << std::endl;
-    std::cout << "   GET  http://localhost:8080/heartbeat - Liveness check"
-              << std::endl;
-    std::cout << "   GET  http://localhost:8080/health    - Health status"
-              << std::endl;
-    std::cout << "   GET  http://localhost:8080/ready     - Readiness check"
-              << std::endl;
-    std::cout << "   GET  http://localhost:8080/metrics   - Performance metrics"
-              << std::endl;
-    std::cout << "   POST http://localhost:8080/api/v1/inference/predict - Run "
-                 "inference"
-              << std::endl;
-    std::cout << "\n" << std::endl;
-
-    // Start the server (this blocks)
-    server.run();
-
-  } catch (const std::exception &e) {
-    std::cerr << "Server error: " << e.what() << std::endl;
-    return 1;
-  }
-
+  std::cout << "Tensor" << std::endl;
+  surgengine::Tensor<float> tensor{std::vector<int>{2, 4},
+                                   surgengine::Device::cuda()};
+  tensor.fill_(-1);
+  std::cout << tensor << std::endl;
   return 0;
+  // std::cout << "Starting Surgengine server..." << std::endl;
+
+  // try {
+  //   // Create server on port 8080
+  //   Server server(8080);
+
+  //   if (!server.is_initialized()) {
+  //     std::cerr << "Failed to initialize server" << std::endl;
+  //     return 1;
+  //   }
+
+  //   // Optionally add custom business logic routes
+  //   server.routes()
+  //       .route(http::verb::post, "/api/v1/inference/batch",
+  //              [](const auto &req) {
+  //                auto input = json::parse(req.body());
+  //                auto batch_items = input.value("batch", json::array());
+
+  //                return json{
+  //                    {"job_id", "batch_" +
+  //                    std::to_string(std::time(nullptr))},
+  //                    {"status", "processing"},
+  //                    {"batch_size", batch_items.size()},
+  //                    {"estimated_completion", std::time(nullptr) + 60},
+  //                    {"message", "Batch inference job queued"}};
+  //              })
+  //       .route(http::verb::get, "/api/v1/jobs/{id}", [](const auto &req) {
+  //         // In a real implementation, you'd extract the {id} from the path
+  //         return json{{"job_id", "job_12345"},
+  //                     {"status", "completed"},
+  //                     {"progress", 100},
+  //                     {"result_url", "/api/v1/results/job_12345"},
+  //                     {"created_at", std::time(nullptr) - 120},
+  //                     {"completed_at", std::time(nullptr)}};
+  //       });
+
+  //   std::cout << "\n🚀 Surgengine server is ready!" << std::endl;
+  //   std::cout << "📋 Available endpoints:" << std::endl;
+  //   std::cout << "   GET  http://localhost:8080/          - API overview"
+  //             << std::endl;
+  //   std::cout << "   GET  http://localhost:8080/heartbeat - Liveness check"
+  //             << std::endl;
+  //   std::cout << "   GET  http://localhost:8080/health    - Health status"
+  //             << std::endl;
+  //   std::cout << "   GET  http://localhost:8080/ready     - Readiness check"
+  //             << std::endl;
+  //   std::cout << "   GET  http://localhost:8080/metrics   - Performance
+  //   metrics"
+  //             << std::endl;
+  //   std::cout << "   POST http://localhost:8080/api/v1/inference/predict -
+  //   Run "
+  //                "inference"
+  //             << std::endl;
+  //   std::cout << "\n" << std::endl;
+
+  //   // Start the server (this blocks)
+  //   server.run();
+
+  // } catch (const std::exception &e) {
+  //   std::cerr << "Server error: " << e.what() << std::endl;
+  //   return 1;
+  // }
+
+  // return 0;
 }

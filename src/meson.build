@@ -1,7 +1,5 @@
-subdir('server')
-
 cpp_sources = files('main.cpp')
-cuda_sources = files('kernel.cu')
+cuda_sources = files('kernels/fill_kernel.cu', 'kernels/fill_kernel.hpp')
 
 # Create executable
 executable('surgengine',

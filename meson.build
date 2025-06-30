@@ -13,3 +13,5 @@ boost_dep = dependency('boost', modules: ['system', 'filesystem'], required: tru
 
 # Add subdirectory for source files
 subdir('src')
+subdir('src/server')
+subdir('src/kernels')
