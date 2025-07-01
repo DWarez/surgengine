@@ -1,39 +1,103 @@
 #pragma once
 
-#include <core/storage.cuh>
-#include <cstddef>
-#include <cuda_fp16.h>
+#include "core/device.hpp"
+#include "kernels/fill_kernel.hpp"
+#include "utils/cuda_utils.cuh"
+#include <atomic>
+#include <cstdlib>
+#include <cstring>
+#include <cuda_runtime.h>
 #include <iomanip>
 #include <iostream>
-#include <kernels/fill_kernel.hpp>
 #include <memory>
+#include <new>
 #include <sstream>
-#include <string>
-#include <utils/cuda_utils.cuh>
+#include <stdexcept>
+#include <type_traits>
 #include <vector>
 
 namespace surgengine {
-enum class DataType {
-  FLOAT32,
-  FLOAT16,
-  INT32,
-  INT8,
+template <typename T> class Allocator {
+public:
+  static T *allocate(size_t count, size_t alignment = 32) {
+    size_t size = count * sizeof(T);
+
+    if (alignment < sizeof(void *))
+      alignment = sizeof(void *);
+
+    // bit manipulation magic to round to the closest power of 2
+    size = (size + alignment - 1) & ~(alignment - 1);
+    void *ptr = std::aligned_alloc(alignment, size);
+
+    if (!ptr) {
+      throw std::bad_alloc();
+    }
+    return static_cast<T *>(ptr);
+  }
+
+  static void deallocate(T *ptr) { std::free(ptr); }
 };
+
+template <typename T> class RefCountedStorage {
+private:
+  T *data_;
+  size_t size_;
+  size_t capacity_;
+  mutable std::atomic<int> ref_count_;
+  Device device_;
+
+public:
+  RefCountedStorage(size_t size, const Device &device)
+      : size_(size), capacity_(size), ref_count_(1), device_(device) {
+    if (device.is_cpu()) {
+      data_ = Allocator<T>::allocate(capacity_, 32);
+
+    } else {
+      cudaSetDevice(device_.rank);
+      CUDA_CHECK(cudaMalloc(&data_, capacity_ * sizeof(T)));
+    }
+  }
+
+  ~RefCountedStorage() {
+    if (device_.is_cpu())
+      Allocator<T>::deallocate(data_);
+    else {
+      cudaSetDevice(device_.rank);
+      cudaFree(data_);
+    }
+  }
+
+  void addref() const { ref_count_.fetch_add(1); }
+  void release() const {
+    if (ref_count_.fetch_sub(1) == 1) {
+      delete this;
+    }
+  }
+
+  T *data() const { return data_; }
+  T *data() { return data_; }
+  size_t size() const { return size_; };
+  Device device() const { return device_; };
+
+  RefCountedStorage(const RefCountedStorage &) = delete;
+  RefCountedStorage &operator=(const RefCountedStorage &) = delete;
+};
+
+template <typename T> using StoragePtr = std::shared_ptr<RefCountedStorage<T>>;
 
 template <typename T> class Tensor {
 private:
+  StoragePtr<T> storage_;
   std::vector<int> shape_;
   std::vector<int> strides_;
-  std::unique_ptr<Storage> storage_;
+  size_t storage_offset_;
 
   void compute_strides() {
     strides_.resize(shape_.size());
-
     if (shape_.empty())
       return;
 
     strides_.back() = 1;
-
     for (int i = shape_.size() - 2; i >= 0; --i) {
       strides_[i] = strides_[i + 1] * shape_[i + 1];
     }
@@ -41,58 +105,165 @@ private:
 
   size_t total_elements() const {
     size_t total = 1;
-    for (int dim : shape_) {
+    for (int dim : shape_)
       total *= dim;
-    }
     return total;
   }
 
-  // PRINTING
+public:
+  Tensor(const std::vector<int> &shape, const Device &device = Device::cpu())
+      : shape_(shape), storage_offset_(0) {
+    compute_strides();
+    size_t total = total_elements();
+    storage_ = std::make_shared<RefCountedStorage<T>>(total, device);
+  }
+
+  Tensor(StoragePtr<T> storage, const std::vector<int> &shape,
+         const std::vector<int> &strides, size_t offset = 0)
+      : storage_(storage), shape_(shape), strides_(strides),
+        storage_offset_(offset) {}
+
+  T *data() { return storage_ ? storage_->data() + storage_offset_ : nullptr; }
+  const T *data() const {
+    return storage_ ? storage_->data() + storage_offset_ : nullptr;
+  }
+
+  const std::vector<int> &shape() const { return shape_; }
+  const std::vector<int> &strides() const { return strides_; }
+  size_t numel() const { return total_elements(); }
+  Device device() const {
+    return storage_ ? storage_->device() : Device::cpu();
+  }
+
+  bool is_contiguous() const {
+    std::vector<int> expected_strides = shape_;
+    if (expected_strides.empty())
+      return true;
+
+    expected_strides.back() = 1;
+    for (int i = expected_strides.size() - 2; i >= 0; --i) {
+      expected_strides[i] = expected_strides[i + 1] * shape_[i + 1];
+    }
+    return strides_ == expected_strides;
+  }
+
+  Tensor &zero_() {
+    if (!storage_)
+      return *this;
+
+    if (device().is_cuda()) {
+      cudaSetDevice(device().rank);
+      cudaMemset(data(), 0, numel() * sizeof(T));
+    } else {
+      memset(data(), 0, numel() * sizeof(T));
+    }
+    return *this;
+  }
+
+  Tensor &fill_(T value) {
+    if (!storage_)
+      return *this;
+
+    if (device().is_cuda()) {
+      launch_fill_kernel(data(), value, numel(), device().rank);
+    } else {
+      std::fill_n(data(), numel(), value);
+    }
+    return *this;
+  }
+
+  Tensor view(const std::vector<int> &new_shape) const {
+    if (!is_contiguous()) {
+      throw std::runtime_error("Cannot reshape non-contiguous tensor");
+    }
+
+    size_t new_total = 1;
+    for (int dim : new_shape)
+      new_total *= dim;
+
+    if (new_total != numel()) {
+      throw std::invalid_argument("Cannot reshape: element count mismatch");
+    }
+
+    std::vector<int> new_strides(new_shape.size());
+    if (!new_shape.empty()) {
+      new_strides.back() = 1;
+      for (int i = new_shape.size() - 2; i >= 0; --i) {
+        new_strides[i] = new_strides[i + 1] * new_shape[i + 1];
+      }
+    }
+
+    return Tensor(storage_, new_shape, new_strides, storage_offset_);
+  }
+
+  Tensor slice(size_t dim, int start, int end) const {
+    if (dim >= shape_.size()) {
+      throw std::out_of_range("Dimension out of range");
+    }
+
+    if (start < 0 || end > shape_[dim] || start >= end) {
+      throw std::out_of_range("Slice indices out of range");
+    }
+
+    std::vector<int> new_shape = shape_;
+    new_shape[dim] = end - start;
+
+    size_t new_offset = storage_offset_ + start * strides_[dim];
+
+    return Tensor(storage_, new_shape, strides_, new_offset);
+  }
+
+  static Tensor zeros(const std::vector<int> &shape,
+                      const Device &device = Device::cpu()) {
+    Tensor tensor(shape, device);
+    tensor.zero_();
+    return tensor;
+  }
+
+  static Tensor empty(const std::vector<int> &shape,
+                      const Device &device = Device::cpu()) {
+    return Tensor(shape, device);
+  }
+
+  size_t memory_usage() const {
+    return storage_ ? storage_->size() * sizeof(T) : 0;
+  }
+
+  bool shares_storage(const Tensor &other) const {
+    return storage_ == other.storage_;
+  }
+
+  // PRINT METHODS
+private:
   std::string get_dtype_name() const {
-    if constexpr (std::is_same_v<T, float>)
+    if constexpr (std::is_same_v<T, float>) {
       return "float32";
-    else if constexpr (std::is_same_v<T, double>)
+    } else if constexpr (std::is_same_v<T, double>) {
       return "float64";
-    else if constexpr (std::is_same_v<T, half>)
-      return "float16";
-    else if constexpr (std::is_same_v<T, int32_t>)
+    } else if constexpr (std::is_same_v<T, int32_t>) {
       return "int32";
-    else if constexpr (std::is_same_v<T, int8_t>)
+    } else if constexpr (std::is_same_v<T, int8_t>) {
       return "int8";
-    else
+    } else if constexpr (std::is_same_v<T, int16_t>) {
+      return "int16";
+    } else if constexpr (std::is_same_v<T, int64_t>) {
+      return "int64";
+    } else {
       return "unknown";
+    }
   }
 
   void print_tensor_data(std::ostream &os, const std::vector<T> &data) const {
     const int max_elements = 6;
 
-    if (ndim() == 1) {
+    if (shape_.size() == 0) {
+      os << format_value(data[0]);
+    } else if (shape_.size() == 1) {
       print_1d(os, data, max_elements);
-    } else if (ndim() == 2) {
+    } else if (shape_.size() == 2) {
       print_2d(os, data, max_elements);
     } else {
-      // Higher dimensions - show flattened
-      os << "tensor([";
-      size_t total = numel();
-      if (total <= max_elements) {
-        for (size_t i = 0; i < total; ++i) {
-          os << format_value(data[i]);
-          if (i < total - 1)
-            os << ", ";
-        }
-      } else {
-        int half = max_elements / 2;
-        for (int i = 0; i < half; ++i) {
-          os << format_value(data[i]) << ", ";
-        }
-        os << "..., ";
-        for (size_t i = total - half; i < total; ++i) {
-          os << format_value(data[i]);
-          if (i < total - 1)
-            os << ", ";
-        }
-      }
-      os << "])";
+      print_nd(os, data, max_elements);
     }
   }
 
@@ -102,14 +273,12 @@ private:
     int total_elements = shape_[0];
 
     if (total_elements <= max_elements) {
-      // Print all elements
       for (int i = 0; i < total_elements; ++i) {
         os << format_value(data[i]);
         if (i < total_elements - 1)
           os << ", ";
       }
     } else {
-      // Print first few, ..., last few
       int half = max_elements / 2;
       for (int i = 0; i < half; ++i) {
         os << format_value(data[i]) << ", ";
@@ -132,7 +301,6 @@ private:
     os << "[" << std::endl;
 
     if (rows <= max_elements) {
-      // Print all rows
       for (int r = 0; r < rows; ++r) {
         os << "  [";
         print_row(os, data, r, cols, max_elements);
@@ -142,7 +310,6 @@ private:
         os << std::endl;
       }
     } else {
-      // Print first few rows, ..., last few rows
       int half = max_elements / 2;
       for (int r = 0; r < half; ++r) {
         os << "  [";
@@ -166,14 +333,12 @@ private:
   void print_row(std::ostream &os, const std::vector<T> &data, int row,
                  int cols, int max_elements) const {
     if (cols <= max_elements) {
-      // Print all columns
       for (int c = 0; c < cols; ++c) {
         os << format_value(data[row * cols + c]);
         if (c < cols - 1)
           os << ", ";
       }
     } else {
-      // Print first few, ..., last few columns
       int half = max_elements / 2;
       for (int c = 0; c < half; ++c) {
         os << format_value(data[row * cols + c]) << ", ";
@@ -189,11 +354,10 @@ private:
 
   void print_nd(std::ostream &os, const std::vector<T> &data,
                 int max_elements) const {
-    // For higher dimensions, show shape and a flattened view
     os << "tensor([";
 
     size_t total = numel();
-    if (total <= max_elements) {
+    if (total <= (size_t)(max_elements)) {
       for (size_t i = 0; i < total; ++i) {
         os << format_value(data[i]);
         if (i < total - 1)
@@ -225,42 +389,6 @@ private:
   }
 
 public:
-  Tensor() = default;
-
-  Tensor(const std::vector<int> &shape, const Device &device = Device::cpu())
-      : shape_(shape) {
-    compute_strides();
-    storage_ = surgengine::make_storage<T>(total_elements(), device);
-  }
-
-  Tensor(const Tensor &other) : shape_(other.shape_), strides_(other.strides_) {
-    if (other.storage_)
-      storage_ = other.storage_->clone();
-  }
-
-  Tensor(Tensor &&other) noexcept
-      : shape_(std::move(other.shape_)), strides_(std::move(other.strides_)),
-        storage_(std::move(other.storage_)) {}
-
-  Tensor &operator=(const Tensor &other) {
-    if (this != &other) {
-      shape_ = other.shape_;
-      strides_ = other.strides_;
-      storage_ = other.storage_ ? other.storage_->clone() : nullptr;
-    }
-    return this;
-  }
-
-  Tensor &operator=(Tensor &&other) noexcept {
-    if (this != &other) {
-      shape_ = std::move(other.shape_);
-      strides_ = std::move(other.strides_);
-      storage_ = std::move(other.storage_);
-    }
-    return *this;
-  }
-
-  // PRINTING
   friend std::ostream &operator<<(std::ostream &os, const Tensor<T> &tensor) {
     os << "Tensor(";
     os << "shape=[";
@@ -282,11 +410,10 @@ public:
       os << "[]";
       return os;
     }
-
-    // Get data on CPU for printing
     std::vector<T> print_data;
-    if (tensor.is_cuda()) {
+    if (tensor.device().is_cuda()) {
       print_data.resize(tensor.numel());
+      cudaSetDevice(tensor.device().rank);
       cudaMemcpy(print_data.data(), tensor.data(), tensor.numel() * sizeof(T),
                  cudaMemcpyDeviceToHost);
     } else {
@@ -297,113 +424,8 @@ public:
     tensor.print_tensor_data(os, print_data);
     return os;
   }
-
-  const std::vector<int> &shape() const { return shape_; }
-  const std::vector<int> &strides() const { return strides_; }
-  int ndim() const { return shape_.size(); }
-  size_t numel() const { return total_elements(); }
-  Device device() const {
-    return storage_ ? storage_->device() : Device::cpu();
-  }
-
-  T *data() { return storage_ ? static_cast<T *>(storage_->data()) : nullptr; }
-
-  const T *data() const {
-    return storage_ ? static_cast<const T *>(storage_->data()) : nullptr;
-  }
-
-  Tensor to(const Device &target_device) const {
-    if (!storage_ || storage_->device() == target_device)
-      return *this;
-
-    Tensor moved_tensor;
-    moved_tensor.shape_ = shape_;
-    moved_tensor.strides_ = strides_;
-    moved_tensor.storage_ = storage_->to_device(target_device);
-    return moved_tensor;
-  }
-
-  Tensor &to_(const Device &target_device) {
-    if (storage_ && storage_->device() != target_device) {
-      storage_ = storage_->to_device(target_device);
-    }
-    return *this;
-  }
-
-  Tensor cuda(int device_rank = 0) const {
-    return to(Device::cuda(device_rank));
-  }
-
-  Tensor cpu() const { return to(Device::cpu()); }
-
-  Tensor &cuda_(int device_rank = 0) { return to_(Device::cuda(device_rank)); }
-
-  Tensor &cpu_() { return to_(Device::cpu()); }
-
-  bool is_cuda() const { return device().is_cuda(); }
-  bool is_cpu() const { return device().is_cpu(); }
-
-  Tensor view(const std::vector<int> &new_shape) const {
-    size_t new_total = 1;
-    for (int dim : new_shape) {
-      new_total *= dim;
-    }
-
-    if (new_total != total_elements()) {
-      throw std::invalid_argument(
-          "Cannot reshape tensor: element count mismatch");
-    }
-
-    Tensor result = *this;
-    result.shape_ = new_shape;
-    result.compute_strides();
-    return result;
-  }
-
-  void fill_(T value) {
-    if (!storage_)
-      return;
-
-    if (is_cuda()) {
-      launch_fill_kernel(data(), value, numel(), device().rank);
-    } else {
-      auto *cpu_storage = static_cast<CPUStorage<T> *>(storage_.get());
-      std::fill(cpu_storage->vector().begin(), cpu_storage->vector().end(),
-                value);
-    }
-  }
-
-  void zero_() {
-    if (!storage_)
-      return;
-
-    if (is_cuda()) {
-      cudaSetDevice(device().rank);
-      cudaMemset(data(), 0, storage_->size_bytes());
-    } else {
-      auto *cpu_storage = static_cast<CPUStorage<T> *>(storage_.get());
-      std::fill(cpu_storage->vector().begin(), cpu_storage->vector().end(),
-                T{0});
-    }
-  }
-
-  static Tensor zeros(const std::vector<int> &shape,
-                      const Device &device = Device::cpu()) {
-    Tensor tensor(shape, device);
-    tensor.zero_();
-    return tensor;
-  }
-
-  static Tensor ones(const std::vector<int> &shape,
-                     const Device &device = Device::cpu()) {
-    Tensor tensor(shape, device);
-    tensor.fill_(T{1});
-    return tensor;
-  }
 };
 
 using FloatTensor = Tensor<float>;
-using HalfTensor = Tensor<half>;
-using IntTensor = Tensor<int32_t>;
-using Int8Tensor = Tensor<int8_t>;
+using DoubleTensor = Tensor<double>;
 } // namespace surgengine
