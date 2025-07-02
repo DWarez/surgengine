@@ -1,4 +1,3 @@
-#include "core/device.hpp"
 #include <boost/asio/basic_socket_acceptor.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -11,18 +10,16 @@
 #include <boost/beast/http/string_body_fwd.hpp>
 #include <boost/beast/version.hpp>
 #include <boost/config.hpp>
+#include <core/nn/module.cuh>
 #include <core/tensor.cuh>
-#include <iostream>
 #include <nlohmann/json.hpp>
 #include <server/server.hpp>
-#include <vector>
+
+using namespace surgengine;
+using namespace surgengine::nn;
 
 int main() {
-  std::cout << "Tensor" << std::endl;
-  surgengine::Tensor<float> tensor{std::vector<int>{2, 4},
-                                   surgengine::Device::cuda()};
-  tensor.fill_(-1);
-  std::cout << tensor << std::endl;
+  nn::Parameter<float> a;
   return 0;
   // std::cout << "Starting Surgengine server..." << std::endl;
 

@@ -10,6 +10,7 @@ gtest_main_dep = dependency('gtest_main', required: true)
 
 # Find CUDA toolkit
 cuda_dep = dependency('cuda', version : '>=10.0', required : true)
+cuda_args = ['-gencode', 'arch=compute_89,code=sm_89']
 
 # Find Boost
 boost_dep = dependency('boost', modules: ['system', 'filesystem'], required: true)
