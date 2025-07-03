@@ -10,7 +10,7 @@
 #include <boost/beast/http/string_body_fwd.hpp>
 #include <boost/beast/version.hpp>
 #include <boost/config.hpp>
-#include <core/nn/module.cuh>
+#include <core/nn/parameter.cuh>
 #include <core/tensor.cuh>
 #include <nlohmann/json.hpp>
 #include <server/server.hpp>

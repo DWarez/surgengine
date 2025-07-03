@@ -1,4 +1,4 @@
-#include <core/nn/module.cuh>
+#include <core/nn/parameter.cuh>
 #include <gtest/gtest.h>
 
 using namespace surgengine::nn;

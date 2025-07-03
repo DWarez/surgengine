@@ -90,7 +90,7 @@ private:
   StoragePtr<T> storage_;
   std::vector<int> shape_;
   std::vector<int> strides_;
-  size_t storage_offset_;
+  size_t offset_;
 
   void compute_strides() {
     strides_.resize(shape_.size());
@@ -110,9 +110,34 @@ private:
     return total;
   }
 
+  static void copy_data_between_devices(const float *src, float *dst,
+                                        size_t count, const Device &src_device,
+                                        const Device &dst_device) {
+    if (src_device.is_cpu() && dst_device.is_cpu()) {
+      std::memcpy(dst, src, count * sizeof(float));
+    } else if (src_device.is_cpu() && dst_device.is_cuda()) {
+      cudaSetDevice(dst_device.rank);
+      CUDA_CHECK(
+          cudaMemcpy(dst, src, count * sizeof(float), cudaMemcpyHostToDevice));
+    } else if (src_device.is_cuda() && dst_device.is_cpu()) {
+      cudaSetDevice(src_device.rank);
+      CUDA_CHECK(
+          cudaMemcpy(dst, src, count * sizeof(float), cudaMemcpyDeviceToHost));
+    } else if (src_device.is_cuda() && dst_device.is_cuda()) {
+      if (src_device.rank == dst_device.rank) {
+        cudaSetDevice(src_device.rank);
+        CUDA_CHECK(cudaMemcpy(dst, src, count * sizeof(float),
+                              cudaMemcpyDeviceToDevice));
+      } else {
+        CUDA_CHECK(cudaMemcpyPeer(dst, dst_device.rank, src, src_device.rank,
+                                  count * sizeof(float)));
+      }
+    }
+  }
+
 public:
   Tensor(const std::vector<int> &shape, const Device &device = Device::cpu())
-      : shape_(shape), storage_offset_(0) {
+      : shape_(shape), offset_(0) {
     compute_strides();
     size_t total = total_elements();
     storage_ = std::make_shared<RefCountedStorage<T>>(total, device);
@@ -120,12 +145,11 @@ public:
 
   Tensor(StoragePtr<T> storage, const std::vector<int> &shape,
          const std::vector<int> &strides, size_t offset = 0)
-      : storage_(storage), shape_(shape), strides_(strides),
-        storage_offset_(offset) {}
+      : storage_(storage), shape_(shape), strides_(strides), offset_(offset) {}
 
-  T *data() { return storage_ ? storage_->data() + storage_offset_ : nullptr; }
+  T *data() { return storage_ ? storage_->data() + offset_ : nullptr; }
   const T *data() const {
-    return storage_ ? storage_->data() + storage_offset_ : nullptr;
+    return storage_ ? storage_->data() + offset_ : nullptr;
   }
 
   const std::vector<int> &shape() const { return shape_; }
@@ -193,7 +217,7 @@ public:
       }
     }
 
-    return Tensor(storage_, new_shape, new_strides, storage_offset_);
+    return Tensor(storage_, new_shape, new_strides, offset_);
   }
 
   Tensor slice(size_t dim, int start, int end) const {
@@ -208,7 +232,7 @@ public:
     std::vector<int> new_shape = shape_;
     new_shape[dim] = end - start;
 
-    size_t new_offset = storage_offset_ + start * strides_[dim];
+    size_t new_offset = offset_ + start * strides_[dim];
 
     return Tensor(storage_, new_shape, strides_, new_offset);
   }
@@ -224,6 +248,20 @@ public:
                       const Device &device = Device::cpu()) {
     return Tensor(shape, device);
   }
+
+  Tensor to(const Device &target_device) const {
+    if (device() == target_device)
+      return *this;
+
+    Tensor<T> result(shape_, target_device);
+    copy_data_between_devices(storage_->data(), result.storage_->data(),
+                              numel(), storage_->device, target_device);
+    return result;
+  }
+
+  Tensor cuda(int rank = 0) const { return to(Device::cuda(rank)); }
+
+  Tensor cpu() const { return to(Device(Device::Device::cpu())); }
 
   size_t memory_usage() const {
     return storage_ ? storage_->size() * sizeof(T) : 0;
