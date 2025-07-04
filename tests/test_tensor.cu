@@ -11,8 +11,10 @@ protected:
     int device_count = 0;
     cudaGetDeviceCount(&device_count);
     cuda_available_ = (device_count > 0);
+    test_shape = {2, 3};
   }
-
+  std::vector<int> test_shape;
+  std::vector<float> test_data;
   bool cuda_available_ = false;
 };
 
@@ -293,4 +295,190 @@ TEST_F(TensorTest, CompleteWorkflow) {
 
   EXPECT_FLOAT_EQ(original.data()[0], 1.0f); // First row unchanged
   EXPECT_FLOAT_EQ(original.data()[6], 2.0f); // Modified through slice
+}
+
+TEST_F(TensorTest, CpuToCpu) {
+  // Create a tensor on CPU
+  FloatTensor cpu_tensor(test_shape, Device::cpu());
+
+  // Fill with test data
+  float *data = cpu_tensor.data();
+  for (size_t i = 0; i < test_data.size(); ++i) {
+    data[i] = test_data[i];
+  }
+
+  // Move to CPU (should return same tensor)
+  FloatTensor result = cpu_tensor.to(Device::cpu());
+
+  // Verify device and shape
+  EXPECT_TRUE(result.device().is_cpu());
+  EXPECT_EQ(result.shape(), test_shape);
+  EXPECT_EQ(result.numel(), 6);
+
+  // Verify data is preserved
+  const float *result_data = result.data();
+  for (size_t i = 0; i < test_data.size(); ++i) {
+    EXPECT_FLOAT_EQ(result_data[i], test_data[i]);
+  }
+
+  // Should return the same tensor (no copy needed)
+  EXPECT_TRUE(result.shares_storage(cpu_tensor));
+}
+
+TEST_F(TensorTest, CpuToCuda) {
+  // Skip if CUDA is not available
+  int device_count;
+  if (cudaGetDeviceCount(&device_count) != cudaSuccess || device_count == 0) {
+    GTEST_SKIP() << "CUDA not available, skipping CUDA tests";
+  }
+
+  // Create a tensor on CPU
+  FloatTensor cpu_tensor(test_shape, Device::cpu());
+
+  // Fill with test data
+  float *data = cpu_tensor.data();
+  for (size_t i = 0; i < test_data.size(); ++i) {
+    data[i] = test_data[i];
+  }
+
+  // Move to CUDA
+  FloatTensor cuda_tensor = cpu_tensor.to(Device::cuda(0));
+
+  // Verify device and shape
+  EXPECT_TRUE(cuda_tensor.device().is_cuda());
+  EXPECT_EQ(cuda_tensor.device().rank, 0);
+  EXPECT_EQ(cuda_tensor.shape(), test_shape);
+  EXPECT_EQ(cuda_tensor.numel(), 6);
+
+  // Verify data by copying back to CPU
+  FloatTensor back_to_cpu = cuda_tensor.to(Device::cpu());
+  const float *result_data = back_to_cpu.data();
+  for (size_t i = 0; i < test_data.size(); ++i) {
+    EXPECT_FLOAT_EQ(result_data[i], test_data[i]);
+  }
+
+  // Should not share storage with original
+  EXPECT_FALSE(cuda_tensor.shares_storage(cpu_tensor));
+}
+
+TEST_F(TensorTest, CudaToCpu) {
+  // Skip if CUDA is not available
+  int device_count;
+  if (cudaGetDeviceCount(&device_count) != cudaSuccess || device_count == 0) {
+    GTEST_SKIP() << "CUDA not available, skipping CUDA tests";
+  }
+
+  // Create a tensor on CUDA
+  FloatTensor cuda_tensor(test_shape, Device::cuda(0));
+
+  // Fill with test data (create on CPU first, then copy)
+  FloatTensor cpu_temp(test_shape, Device::cpu());
+  float *temp_data = cpu_temp.data();
+  for (size_t i = 0; i < test_data.size(); ++i) {
+    temp_data[i] = test_data[i];
+  }
+  cuda_tensor = cpu_temp.to(Device::cuda(0));
+
+  // Move back to CPU
+  FloatTensor result = cuda_tensor.to(Device::cpu());
+
+  // Verify device and shape
+  EXPECT_TRUE(result.device().is_cpu());
+  EXPECT_EQ(result.shape(), test_shape);
+  EXPECT_EQ(result.numel(), 6);
+
+  // Verify data is preserved
+  const float *result_data = result.data();
+  for (size_t i = 0; i < test_data.size(); ++i) {
+    EXPECT_FLOAT_EQ(result_data[i], test_data[i]);
+  }
+
+  // Should not share storage with original
+  EXPECT_FALSE(result.shares_storage(cuda_tensor));
+}
+
+TEST_F(TensorTest, CudaToCuda) {
+  // Skip if CUDA is not available
+  int device_count;
+  if (cudaGetDeviceCount(&device_count) != cudaSuccess || device_count == 0) {
+    GTEST_SKIP() << "CUDA not available, skipping CUDA tests";
+  }
+
+  // Create a tensor on CUDA device 0
+  FloatTensor cuda_tensor(test_shape, Device::cuda(0));
+
+  // Fill with test data
+  FloatTensor cpu_temp(test_shape, Device::cpu());
+  float *temp_data = cpu_temp.data();
+  for (size_t i = 0; i < test_data.size(); ++i) {
+    temp_data[i] = test_data[i];
+  }
+  cuda_tensor = cpu_temp.to(Device::cuda(0));
+
+  // Move to same CUDA device (should return same tensor)
+  FloatTensor result = cuda_tensor.to(Device::cuda(0));
+
+  // Verify device and shape
+  EXPECT_TRUE(result.device().is_cuda());
+  EXPECT_EQ(result.device().rank, 0);
+  EXPECT_EQ(result.shape(), test_shape);
+  EXPECT_EQ(result.numel(), 6);
+
+  // Should return the same tensor (no copy needed)
+  EXPECT_TRUE(result.shares_storage(cuda_tensor));
+
+  // Verify data by copying to CPU
+  FloatTensor cpu_result = result.to(Device::cpu());
+  const float *result_data = cpu_result.data();
+  for (size_t i = 0; i < test_data.size(); ++i) {
+    EXPECT_FLOAT_EQ(result_data[i], test_data[i]);
+  }
+}
+
+TEST_F(TensorTest, EmptyTensorMove) {
+  // Test with empty tensor
+  FloatTensor empty_tensor({0}, Device::cpu());
+
+  // Move to CUDA (if available)
+  int device_count;
+  if (cudaGetDeviceCount(&device_count) == cudaSuccess && device_count > 0) {
+    FloatTensor cuda_empty = empty_tensor.to(Device::cuda(0));
+    EXPECT_TRUE(cuda_empty.device().is_cuda());
+    EXPECT_EQ(cuda_empty.numel(), 0);
+  }
+
+  // Move to CPU
+  FloatTensor cpu_empty = empty_tensor.to(Device::cpu());
+  EXPECT_TRUE(cpu_empty.device().is_cpu());
+  EXPECT_EQ(cpu_empty.numel(), 0);
+}
+
+TEST_F(TensorTest, ConvenienceMethods) {
+  // Test cuda() and cpu() convenience methods
+  FloatTensor cpu_tensor(test_shape, Device::cpu());
+
+  // Fill with test data
+  float *data = cpu_tensor.data();
+  for (size_t i = 0; i < test_data.size(); ++i) {
+    data[i] = test_data[i];
+  }
+
+  // Test cpu() method
+  FloatTensor cpu_result = cpu_tensor.cpu();
+  EXPECT_TRUE(cpu_result.device().is_cpu());
+  EXPECT_TRUE(cpu_result.shares_storage(cpu_tensor));
+
+  // Test cuda() method (if CUDA available)
+  int device_count;
+  if (cudaGetDeviceCount(&device_count) == cudaSuccess && device_count > 0) {
+    FloatTensor cuda_result = cpu_tensor.cuda();
+    EXPECT_TRUE(cuda_result.device().is_cuda());
+    EXPECT_EQ(cuda_result.device().rank, 0);
+    EXPECT_FALSE(cuda_result.shares_storage(cpu_tensor));
+
+    // Test cuda() with specific rank
+    FloatTensor cuda_result_rank = cpu_tensor.cuda(0);
+    EXPECT_TRUE(cuda_result_rank.device().is_cuda());
+    EXPECT_EQ(cuda_result_rank.device().rank, 0);
+  }
 }

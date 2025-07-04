@@ -113,6 +113,9 @@ private:
   static void copy_data_between_devices(const float *src, float *dst,
                                         size_t count, const Device &src_device,
                                         const Device &dst_device) {
+
+    // this case should probably never happen but let's support it because why
+    // not
     if (src_device.is_cpu() && dst_device.is_cpu()) {
       std::memcpy(dst, src, count * sizeof(float));
     } else if (src_device.is_cpu() && dst_device.is_cuda()) {
@@ -255,7 +258,7 @@ public:
 
     Tensor<T> result(shape_, target_device);
     copy_data_between_devices(storage_->data(), result.storage_->data(),
-                              numel(), storage_->device, target_device);
+                              numel(), storage_->device(), target_device);
     return result;
   }
 
