@@ -1,3 +1,4 @@
+#include "core/device.hpp"
 #include <boost/asio/basic_socket_acceptor.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -10,8 +11,10 @@
 #include <boost/beast/http/string_body_fwd.hpp>
 #include <boost/beast/version.hpp>
 #include <boost/config.hpp>
+#include <core/nn/module.cuh>
 #include <core/nn/parameter.cuh>
 #include <core/tensor.cuh>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <server/server.hpp>
 
@@ -19,7 +22,14 @@ using namespace surgengine;
 using namespace surgengine::nn;
 
 int main() {
-  nn::Parameter<float> a;
+  // Module<float> module("test_module", Device::cpu());
+  // module.register_parameter("culo",
+  // std::make_shared<Parameter<float>>("culo")); auto submodule =
+  // std::make_shared<Module<float>>("sub");
+  // submodule->register_parameter("subculo",
+  //                               std::make_shared<Parameter<float>>("subculo"));
+  // module.register_module("sub", submodule);
+  // auto all = module.named_parameters();
   return 0;
   // std::cout << "Starting Surgengine server..." << std::endl;
 

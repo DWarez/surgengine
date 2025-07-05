@@ -36,7 +36,22 @@ test_parameter_exe = executable('parameter_test',
     ],
     cuda_args: cuda_args
 )
+
+test_module_exe = executable('module_test',
+    sources: [
+        'test_module.cu',
+    ],
+    dependencies: [
+      tensor_dep,
+        cuda_dep,
+        gtest_dep,
+        gtest_main_dep
+    ],
+    cuda_args: cuda_args
+)
+
 # Register the test
 test('device_test', test_device_exe)
 test('tensor_test', test_tensor_exe)
 test('parameter_test', test_parameter_exe)
+test('module_test', test_module_exe)
