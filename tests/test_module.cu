@@ -1,6 +1,6 @@
-#include "core/device.hpp"
 #include "core/nn/parameter.cuh"
 #include "core/tensor.cuh"
+#include <core/device.cuh>
 #include <core/nn/module.cuh>
 #include <gtest/gtest.h>
 #include <memory>

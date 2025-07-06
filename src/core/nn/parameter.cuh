@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/device.hpp"
+#include <core/device.cuh>
 #include <core/nn/init.cuh>
 #include <core/tensor.cuh>
 

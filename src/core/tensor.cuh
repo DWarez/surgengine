@@ -1,14 +1,14 @@
 #pragma once
 
-#include "core/device.hpp"
-#include "kernels/fill_kernel.hpp"
 #include "utils/cuda_utils.cuh"
 #include <atomic>
+#include <core/device.cuh>
 #include <cstdlib>
 #include <cstring>
 #include <cuda_runtime.h>
 #include <iomanip>
 #include <iostream>
+#include <kernels/fill_kernel.hpp>
 #include <memory>
 #include <new>
 #include <sstream>

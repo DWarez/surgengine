@@ -1,4 +1,6 @@
 #pragma once
+#include <cuda_runtime.h>
+#include <utils/cuda_utils.cuh>
 
 namespace surgengine {
 enum class DeviceType { CPU, CUDA };
@@ -20,5 +22,17 @@ struct Device {
 
   bool is_cuda() const { return type == DeviceType::CUDA; }
   bool is_cpu() const { return type == DeviceType::CPU; }
+
+  static int cuda_device_count() {
+    int device_count = 0;
+    CUDA_CHECK(cudaGetDeviceCount(&device_count));
+    return device_count;
+  }
+
+  static bool is_cuda_available() {
+    if (cuda_device_count() > 0)
+      return true;
+    return false;
+  }
 };
 } // namespace surgengine

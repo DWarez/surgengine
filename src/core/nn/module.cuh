@@ -1,6 +1,6 @@
 #pragma once
-#include "core/device.hpp"
 #include "core/nn/parameter.cuh"
+#include <core/device.cuh>
 #include <core/tensor.cuh>
 #include <cstddef>
 #include <memory>
@@ -11,10 +11,10 @@ namespace surgengine {
 namespace nn {
 template <typename T> class Module {
 protected:
-  std::unordered_map<std::string, std::shared_ptr<Parameter<T>>> parameters_;
-  std::unordered_map<std::string, std::shared_ptr<Module<T>>> submodules_;
   Device device_;
   std::string name_;
+  std::unordered_map<std::string, std::shared_ptr<Parameter<T>>> parameters_;
+  std::unordered_map<std::string, std::shared_ptr<Module<T>>> submodules_;
 
 public:
   Module(const std::string &name = "", const Device &device = Device::cpu())

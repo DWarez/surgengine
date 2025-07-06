@@ -45,7 +45,24 @@ test_module_exe = executable('module_test',
       tensor_dep,
         cuda_dep,
         gtest_dep,
-        gtest_main_dep
+        gtest_main_dep,
+        cblas_dep,
+        cublas_dep,
+    ],
+    cuda_args: cuda_args
+)
+
+test_linear_layer_exe = executable('linear_layer_test',
+    sources: [
+        'test_linear_layer.cu',
+    ],
+    dependencies: [
+      tensor_dep,
+        cuda_dep,
+        gtest_dep,
+        gtest_main_dep,
+        cblas_dep,
+        cublas_dep,
     ],
     cuda_args: cuda_args
 )
@@ -55,3 +72,4 @@ test('device_test', test_device_exe)
 test('tensor_test', test_tensor_exe)
 test('parameter_test', test_parameter_exe)
 test('module_test', test_module_exe)
+test('linear_layer_test', test_linear_layer_exe)

@@ -1,4 +1,4 @@
-#include "core/tensor.cuh"
+#include <core/tensor.cuh>
 #include <cuda_runtime.h>
 #include <gtest/gtest.h>
 #include <sstream>

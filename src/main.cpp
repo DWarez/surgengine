@@ -1,4 +1,3 @@
-#include "core/device.hpp"
 #include <boost/asio/basic_socket_acceptor.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -11,6 +10,7 @@
 #include <boost/beast/http/string_body_fwd.hpp>
 #include <boost/beast/version.hpp>
 #include <boost/config.hpp>
+#include <core/device.cuh>
 #include <core/nn/module.cuh>
 #include <core/nn/parameter.cuh>
 #include <core/tensor.cuh>

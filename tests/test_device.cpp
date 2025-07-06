@@ -1,4 +1,4 @@
-#include <core/device.hpp>
+#include <core/device.cuh>
 #include <gtest/gtest.h>
 #include <set>
 #include <vector>
