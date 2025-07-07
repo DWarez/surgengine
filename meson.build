@@ -3,6 +3,9 @@ project('surgengine', ['cpp', 'cuda'],
         default_options : ['cpp_std=c++17'])
 
 add_project_arguments('-Wno-reorder', language: 'cpp')
+if get_option('buildtype') == 'debug'
+  add_global_arguments('-g', '-O0', language: 'cpp')
+endif
 
 json_dep = dependency('nlohmann_json', required: true)
 gtest_dep = dependency('gtest', required: true)

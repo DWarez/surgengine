@@ -29,7 +29,7 @@ protected:
 
   FloatTensor createRandomTensor(const std::vector<int> &shape,
                                  const Device &device) {
-    FloatTensor tensor(shape, device);
+    FloatTensor tensor(shape, Device::cpu());
     float *data = tensor.data();
     std::random_device rd;
     std::mt19937 gen(42);
@@ -43,7 +43,7 @@ protected:
     for (size_t i = 0; i < total_size; ++i) {
       data[i] = dis(gen);
     }
-    return tensor;
+    return device.is_cpu() ? tensor : tensor.to(Device::cuda());
   }
 
   bool tensorsApproxEqual(const FloatTensor &a, const FloatTensor &b,
