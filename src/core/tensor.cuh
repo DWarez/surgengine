@@ -199,6 +199,7 @@ public:
     return *this;
   }
 
+  // Shape manipulation
   Tensor view(const std::vector<int> &new_shape) const {
     if (!is_contiguous()) {
       throw std::runtime_error("Cannot reshape non-contiguous tensor");
@@ -239,6 +240,28 @@ public:
 
     return Tensor(storage_, new_shape, strides_, new_offset);
   }
+
+  // Transpose
+  Tensor transpose(int dim0, int dim1) {
+    if (dim0 >= shape_.size() || dim1 >= shape_.size()) {
+      throw std::out_of_range("Dimension out of range");
+    }
+    std::vector<int> new_shape = shape_;
+    std::vector<int> new_strides = strides_;
+    std::swap(new_shape[dim0], new_shape[dim1]);
+    std::swap(new_strides[dim0], new_strides[dim1]);
+    return Tensor(storage_, new_shape, new_strides, offset_);
+  }
+
+  Tensor transpose() const {
+    if (shape_.size() < 2) {
+      throw std::runtime_error(
+          "Cannot transpose tensor with less than 2 dimensions");
+    }
+    return transpose(shape_.size() - 2, shape_.size() - 1);
+  }
+
+  Tensor t() const { return transpose(); }
 
   static Tensor zeros(const std::vector<int> &shape,
                       const Device &device = Device::cpu()) {
