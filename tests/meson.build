@@ -6,7 +6,7 @@ test_device_exe = executable('device_test',
       tensor_dep,
         cuda_dep,
         gtest_dep,
-        gtest_main_dep
+        gtest_main_dep,
     ],
     cuda_args: cuda_args
 )
@@ -19,7 +19,7 @@ test_tensor_exe = executable('tensor_test',
       tensor_dep,
         cuda_dep,
         gtest_dep,
-        gtest_main_dep
+        gtest_main_dep,
     ],
     cuda_args: cuda_args
 )
@@ -30,9 +30,10 @@ test_parameter_exe = executable('parameter_test',
     ],
     dependencies: [
       tensor_dep,
-        cuda_dep,
-        gtest_dep,
-        gtest_main_dep
+      cuda_dep,
+      gtest_dep,
+      gtest_main_dep,
+      kernel_sources_dep,
     ],
     cuda_args: cuda_args
 )

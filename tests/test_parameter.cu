@@ -1,5 +1,6 @@
 #include <core/nn/parameter.cuh>
 #include <gtest/gtest.h>
+#include <kernels/init_kernels.hpp>
 
 using namespace surgengine::nn;
 
