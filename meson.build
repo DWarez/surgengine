@@ -14,6 +14,8 @@ gtest_dep = dependency('gtest', required: true)
 gtest_main_dep = dependency('gtest_main', required: true)
 cublas_dep = dependency('cublas', required: true)
 cblas_dep = dependency('cblas', required: true)
+openmp_dep = dependency('openmp')
+
 
 # Find CUDA toolkit
 cuda_dep = dependency('cuda', version : '>=10.0', required : true)

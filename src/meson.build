@@ -6,7 +6,7 @@ cuda_sources = files('kernels/fill_kernel.cu', 'kernels/fill_kernel.hpp', 'kerne
 
 tensor_lib = static_library('tensor',
     sources: [cpp_sources, cuda_sources],
-    dependencies: [cuda_dep, boost_dep, json_dep, cblas_dep, cublas_dep],
+    dependencies: [cuda_dep, boost_dep, json_dep, cblas_dep, cublas_dep, openmp_dep],
     include_directories: tensor_inc,
     cuda_args: cuda_args,
     install: false
@@ -20,6 +20,6 @@ tensor_dep = declare_dependency(
 # Create executable
 executable('surgengine',
            [cpp_sources],
-           dependencies : [tensor_dep, cuda_dep, boost_dep, json_dep, cblas_dep, cublas_dep],
+           dependencies : [tensor_dep, cuda_dep, boost_dep, json_dep, cblas_dep, cublas_dep, openmp_dep],
            cuda_args: cuda_args,
            install : true)
