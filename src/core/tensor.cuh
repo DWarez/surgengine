@@ -92,30 +92,30 @@ private:
   TensorShape shape_;
   size_t offset_;
 
-  static void copy_data_between_devices(const float *src, float *dst,
-                                        size_t count, const Device &src_device,
+  static void copy_data_between_devices(const T *src, T *dst, size_t count,
+                                        const Device &src_device,
                                         const Device &dst_device) {
 
     // this case should probably never happen but let's support it because why
     // not
     if (src_device.is_cpu() && dst_device.is_cpu()) {
-      std::memcpy(dst, src, count * sizeof(float));
+      std::memcpy(dst, src, count * sizeof(T));
     } else if (src_device.is_cpu() && dst_device.is_cuda()) {
       cudaSetDevice(dst_device.rank);
       CUDA_CHECK(
-          cudaMemcpy(dst, src, count * sizeof(float), cudaMemcpyHostToDevice));
+          cudaMemcpy(dst, src, count * sizeof(T), cudaMemcpyHostToDevice));
     } else if (src_device.is_cuda() && dst_device.is_cpu()) {
       cudaSetDevice(src_device.rank);
       CUDA_CHECK(
-          cudaMemcpy(dst, src, count * sizeof(float), cudaMemcpyDeviceToHost));
+          cudaMemcpy(dst, src, count * sizeof(T), cudaMemcpyDeviceToHost));
     } else if (src_device.is_cuda() && dst_device.is_cuda()) {
       if (src_device.rank == dst_device.rank) {
         cudaSetDevice(src_device.rank);
-        CUDA_CHECK(cudaMemcpy(dst, src, count * sizeof(float),
-                              cudaMemcpyDeviceToDevice));
+        CUDA_CHECK(
+            cudaMemcpy(dst, src, count * sizeof(T), cudaMemcpyDeviceToDevice));
       } else {
         CUDA_CHECK(cudaMemcpyPeer(dst, dst_device.rank, src, src_device.rank,
-                                  count * sizeof(float)));
+                                  count * sizeof(T)));
       }
     }
   }
@@ -132,7 +132,7 @@ public:
          const std::vector<int> &strides, size_t offset = 0)
       : storage_(storage), offset_(offset) {
     std::vector<int64_t> tensor_shape(shape.begin(), shape.end());
-    std::vector<int64_t> tensor_strides(shape.begin(), shape.end());
+    std::vector<int64_t> tensor_strides(strides.begin(), strides.end());
     shape_ = TensorShape(tensor_shape, tensor_strides);
   }
 
@@ -141,23 +141,30 @@ public:
     return storage_ ? storage_->data() + offset_ : nullptr;
   }
 
-  const std::vector<int64_t> &shape() const { return shape_.dims(); }
-  const std::vector<int64_t> &strides() const { return shape_.strides(); }
+  std::vector<int> shape() const {
+    const auto &dims = shape_.dims();
+    return std::vector<int>(dims.begin(), dims.end());
+  }
+  std::vector<int> strides() const {
+    const auto &str = shape_.strides();
+    return std::vector<int>(str.begin(), str.end());
+  }
   size_t numel() const { return shape_.numel(); }
   Device device() const {
     return storage_ ? storage_->device() : Device::cpu();
   }
 
   bool is_contiguous() const {
-    std::vector<int64_t> expected_strides = shape_.strides();
+    const auto &expected_strides = shape_.strides();
     if (expected_strides.empty())
       return true;
 
-    expected_strides.back() = 1;
-    for (int i = expected_strides.size() - 2; i >= 0; --i) {
-      expected_strides[i] = expected_strides[i + 1] * shape_[i + 1];
+    std::vector<int64_t> computed_strides = expected_strides;
+    computed_strides.back() = 1;
+    for (int i = static_cast<int>(computed_strides.size()) - 2; i >= 0; --i) {
+      computed_strides[i] = computed_strides[i + 1] * shape_.dims()[i + 1];
     }
-    return shape_.strides() == expected_strides;
+    return expected_strides == computed_strides;
   }
 
   Tensor &zero_() {
@@ -193,7 +200,7 @@ public:
 
     size_t new_total = 1;
     for (int dim : new_shape)
-      new_total *= dim;
+      new_total *= static_cast<size_t>(dim);
 
     if (new_total != numel()) {
       throw std::invalid_argument("Cannot reshape: element count mismatch");
@@ -202,7 +209,7 @@ public:
     std::vector<int> new_strides(new_shape.size());
     if (!new_shape.empty()) {
       new_strides.back() = 1;
-      for (int i = new_shape.size() - 2; i >= 0; --i) {
+      for (int i = static_cast<int>(new_shape.size()) - 2; i >= 0; --i) {
         new_strides[i] = new_strides[i + 1] * new_shape[i + 1];
       }
     }
@@ -219,32 +226,38 @@ public:
       throw std::out_of_range("Slice indices out of range");
     }
 
-    std::vector<int64_t> new_shape = shape_.dims();
+    std::vector<int> new_shape = shape();
     new_shape[dim] = end - start;
 
-    size_t new_offset = offset_ + start * shape_.strides()[dim];
+    size_t new_offset =
+        offset_ +
+        static_cast<size_t>(start) * static_cast<size_t>(shape_.strides()[dim]);
 
-    return Tensor(storage_, new_shape, shape_.strides(), new_offset);
+    return Tensor(storage_, new_shape, strides(), new_offset);
   }
 
   // Transpose
-  Tensor transpose(int dim0, int dim1) {
-    if (dim0 >= shape_.dims().size() || dim1 >= shape_.dims().size()) {
+  Tensor transpose(int dim0, int dim1) const {
+    if (static_cast<size_t>(dim0) >= shape_.dims().size() ||
+        static_cast<size_t>(dim1) >= shape_.dims().size()) {
       throw std::out_of_range("Dimension out of range");
     }
-    std::vector<int64_t> new_shape = shape_.dims();
-    std::vector<int64_t> new_strides = shape_.strides();
+    std::vector<int> new_shape = shape();
+    std::vector<int> new_strides = strides();
     std::swap(new_shape[dim0], new_shape[dim1]);
     std::swap(new_strides[dim0], new_strides[dim1]);
+
     return Tensor(storage_, new_shape, new_strides, offset_);
   }
 
   Tensor transpose() const {
-    if (shape_.dims().size() < 2) {
+    auto sh = shape();
+    if (sh.size() < 2) {
       throw std::runtime_error(
           "Cannot transpose tensor with less than 2 dimensions");
     }
-    return transpose(shape_.dims().size() - 2, shape_.dims().size() - 1);
+    return transpose(static_cast<int>(sh.size()) - 2,
+                     static_cast<int>(sh.size()) - 1);
   }
 
   Tensor t() const { return transpose(); }
@@ -265,7 +278,8 @@ public:
     if (device() == target_device)
       return *this;
 
-    Tensor<T> result(shape_, target_device);
+    Tensor<T> result(shape(), target_device);
+
     copy_data_between_devices(storage_->data(), result.storage_->data(),
                               numel(), storage_->device(), target_device);
     return result;
@@ -273,7 +287,7 @@ public:
 
   Tensor cuda(int rank = 0) const { return to(Device::cuda(rank)); }
 
-  Tensor cpu() const { return to(Device(Device::Device::cpu())); }
+  Tensor cpu() const { return to(Device::cpu()); }
 
   size_t memory_usage() const {
     return storage_ ? storage_->size() * sizeof(T) : 0;
@@ -306,11 +320,12 @@ private:
   void print_tensor_data(std::ostream &os, const std::vector<T> &data) const {
     const int max_elements = 6;
 
-    if (shape_.dims().size() == 0) {
+    auto sh = shape();
+    if (sh.size() == 0) {
       os << format_value(data[0]);
-    } else if (shape_.dims().size() == 1) {
+    } else if (sh.size() == 1) {
       print_1d(os, data, max_elements);
-    } else if (shape_.dims().size() == 2) {
+    } else if (sh.size() == 2) {
       print_2d(os, data, max_elements);
     } else {
       print_nd(os, data, max_elements);
@@ -320,7 +335,7 @@ private:
   void print_1d(std::ostream &os, const std::vector<T> &data,
                 int max_elements) const {
     os << "[";
-    int total_elements = shape_[0];
+    int total_elements = shape()[0];
 
     if (total_elements <= max_elements) {
       for (int i = 0; i < total_elements; ++i) {
@@ -345,8 +360,9 @@ private:
 
   void print_2d(std::ostream &os, const std::vector<T> &data,
                 int max_elements) const {
-    int rows = shape_[0];
-    int cols = shape_[1];
+    auto sh = shape();
+    int rows = sh[0];
+    int cols = sh[1];
 
     os << "[" << std::endl;
 
@@ -407,7 +423,7 @@ private:
     os << "tensor([";
 
     size_t total = numel();
-    if (total <= (size_t)(max_elements)) {
+    if (total <= static_cast<size_t>(max_elements)) {
       for (size_t i = 0; i < total; ++i) {
         os << format_value(data[i]);
         if (i < total - 1)
@@ -419,7 +435,7 @@ private:
         os << format_value(data[i]) << ", ";
       }
       os << "..., ";
-      for (size_t i = total - half; i < total; ++i) {
+      for (size_t i = total - static_cast<size_t>(half); i < total; ++i) {
         os << format_value(data[i]);
         if (i < total - 1)
           os << ", ";
@@ -442,9 +458,10 @@ public:
   friend std::ostream &operator<<(std::ostream &os, const Tensor<T> &tensor) {
     os << "Tensor(";
     os << "shape=[";
-    for (size_t i = 0; i < tensor.shape_.dims().size(); ++i) {
-      os << tensor.shape_[i];
-      if (i < tensor.shape_.dims().size() - 1)
+    auto sh = tensor.shape();
+    for (size_t i = 0; i < sh.size(); ++i) {
+      os << sh[i];
+      if (i < sh.size() - 1)
         os << ", ";
     }
     os << "], ";

@@ -68,7 +68,7 @@ protected:
     const float *b_data = b_cpu.data();
 
     size_t total_size = 1;
-    for (int64_t dim : a.shape()) {
+    for (int dim : a.shape()) {
       total_size *= static_cast<size_t>(dim);
     }
 
@@ -330,10 +330,10 @@ TEST_F(LinearLayerTest, ParameterInitialization) {
   ASSERT_NE(bias_param, nullptr);
 
   // Check weight shape
-  EXPECT_EQ(weight_param->data().shape(), (std::vector<int64_t>{5, 10}));
+  EXPECT_EQ(weight_param->data().shape(), (std::vector<int>{5, 10}));
 
   // Check bias shape
-  EXPECT_EQ(bias_param->data().shape(), (std::vector<int64_t>{5}));
+  EXPECT_EQ(bias_param->data().shape(), (std::vector<int>{5}));
 
   // Verify parameters are on correct device
   EXPECT_TRUE(weight_param->data().device().is_cpu());
@@ -354,10 +354,10 @@ TEST_F(LinearLayerTest, CUDAParameterInitialization) {
   ASSERT_NE(bias_param, nullptr);
 
   // Check weight shape
-  EXPECT_EQ(weight_param->data().shape(), (std::vector<int64_t>{5, 10}));
+  EXPECT_EQ(weight_param->data().shape(), (std::vector<int>{5, 10}));
 
   // Check bias shape
-  EXPECT_EQ(bias_param->data().shape(), (std::vector<int64_t>{5}));
+  EXPECT_EQ(bias_param->data().shape(), (std::vector<int>{5}));
 
   // Verify parameters are on correct device
   EXPECT_TRUE(weight_param->data().device().is_cuda());

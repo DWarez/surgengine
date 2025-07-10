@@ -29,7 +29,7 @@ TEST_F(ParameterTest, DefaultConstruction) {
 
   EXPECT_EQ(param.name(), "");
   EXPECT_TRUE(param.device().is_cpu());
-  EXPECT_EQ(param.data().shape(), (std::vector<int64_t>{1, 1}));
+  EXPECT_EQ(param.data().shape(), (std::vector<int>{1, 1}));
   EXPECT_EQ(param.data().numel(), 1);
   EXPECT_TRUE(param.data().device().is_cpu());
 }
@@ -39,7 +39,7 @@ TEST_F(ParameterTest, ConstructionWithName) {
 
   EXPECT_EQ(param.name(), test_name);
   EXPECT_TRUE(param.device().is_cpu());
-  EXPECT_EQ(param.data().shape(), (std::vector<int64_t>{1, 1}));
+  EXPECT_EQ(param.data().shape(), (std::vector<int>{1, 1}));
   EXPECT_EQ(param.data().numel(), 1);
 }
 
@@ -67,7 +67,7 @@ TEST_F(ParameterTest, ConstructionWithTensor) {
 
   EXPECT_EQ(param.name(), test_name);
   EXPECT_TRUE(param.device().is_cpu());
-  EXPECT_EQ(param.data().shape(), (std::vector<int64_t>{2, 3}));
+  EXPECT_EQ(param.data().shape(), (std::vector<int>{2, 3}));
   EXPECT_EQ(param.data().numel(), 6);
 
   // Verify data is copied/shared correctly
@@ -82,7 +82,7 @@ TEST_F(ParameterTest, ConstructionWithTensorAndDevice) {
 
   EXPECT_EQ(param.name(), test_name);
   EXPECT_TRUE(param.device().is_cpu());
-  EXPECT_EQ(param.data().shape(), (std::vector<int64_t>{2, 3}));
+  EXPECT_EQ(param.data().shape(), (std::vector<int>{2, 3}));
   EXPECT_FLOAT_EQ(param.data().data()[0], 7.0f);
 }
 
