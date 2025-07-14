@@ -17,6 +17,7 @@
 
 namespace surgengine {
 namespace nn {
+
 template <typename T> class LinearLayer : public Module<T> {
 private:
   int in_features_;
@@ -24,8 +25,9 @@ private:
   bool use_bias_;
   std::shared_ptr<Parameter<T>> weights_;
   std::shared_ptr<Parameter<T>> bias_;
-  static std::mutex cublas_mutex_;
 
+  // Static members for cuBLAS management
+  static std::mutex cublas_mutex_;
   static cublasHandle_t cublas_handle_;
   static bool is_cublas_initialized_;
   static int current_rank_;
@@ -174,8 +176,11 @@ public:
   }
 };
 
+// Static member definitions
+template <typename T> std::mutex LinearLayer<T>::cublas_mutex_;
 template <typename T> cublasHandle_t LinearLayer<T>::cublas_handle_ = nullptr;
 template <typename T> bool LinearLayer<T>::is_cublas_initialized_ = false;
 template <typename T> int LinearLayer<T>::current_rank_ = -1;
+
 } // namespace nn
 } // namespace surgengine

@@ -50,5 +50,6 @@
 *.dwo
 
 builddir
+build
 .cache
 compile_commands.json
