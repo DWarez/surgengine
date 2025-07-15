@@ -21,10 +21,9 @@ set_target_properties(tensor PROPERTIES
 
 # Link libraries to tensor
 target_link_libraries(tensor
+    ${TORCH_LIBRARIES}
     CUDA::cudart
     CUDA::cublas
-    ${CBLAS_LIBRARIES}
-    ${BLAS_LIBRARIES}
 )
 
 # Include directories for tensor
@@ -40,12 +39,11 @@ add_executable(surgengine ${CPP_SOURCES})
 # Link libraries to main executable
 target_link_libraries(surgengine
     tensor
+    ${TORCH_LIBRARIES}
     CUDA::cudart
     Boost::system
     Boost::filesystem
     nlohmann_json::nlohmann_json
-    ${CBLAS_LIBRARIES}
-    ${BLAS_LIBRARIES}
     CUDA::cublas
 )
 

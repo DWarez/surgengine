@@ -14,12 +14,11 @@ set_target_properties(linear_layer_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON
 # Link libraries to all test executables
 set(TEST_LIBRARIES
     tensor
+    ${TORCH_LIBRARIES}
     CUDA::cudart
     CUDA::cublas
     GTest::gtest
     GTest::gtest_main
-    ${CBLAS_LIBRARIES}
-    ${BLAS_LIBRARIES}
 )
 
 target_link_libraries(device_test ${TEST_LIBRARIES})
