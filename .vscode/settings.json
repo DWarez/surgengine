@@ -1,5 +1,3 @@
 {
-    "C_Cpp.default.configurationProvider": "mesonbuild.mesonbuild",
-    "C_Cpp.default.compileCommands": "/home/dwarez/hack/surgengine/builddir/compile_commands.json",
-    "mesonbuild.configureOnOpen": false
+    "C_Cpp.default.compileCommands": "/home/dwarez/hack/surgengine/compile_commands.json",
 }

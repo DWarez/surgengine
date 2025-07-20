@@ -40,9 +40,14 @@ target_include_directories(parameter_test PRIVATE ${TEST_INCLUDE_DIRS})
 target_include_directories(module_test PRIVATE ${TEST_INCLUDE_DIRS})
 target_include_directories(linear_layer_test PRIVATE ${TEST_INCLUDE_DIRS})
 
-# Register tests with CTest
-add_test(NAME device_test COMMAND device_test)
-add_test(NAME tensor_test COMMAND tensor_test)
-add_test(NAME parameter_test COMMAND parameter_test)
-add_test(NAME module_test COMMAND module_test)
-add_test(NAME linear_layer_test COMMAND linear_layer_test)
+# Register tests with CTest - use full path to executables
+add_test(NAME device_test COMMAND $<TARGET_FILE:device_test>)
+add_test(NAME tensor_test COMMAND $<TARGET_FILE:tensor_test>)
+add_test(NAME parameter_test COMMAND $<TARGET_FILE:parameter_test>)
+add_test(NAME module_test COMMAND $<TARGET_FILE:module_test>)
+add_test(NAME linear_layer_test COMMAND $<TARGET_FILE:linear_layer_test>)
+
+# Set working directory for tests (optional, but can be helpful)
+set_tests_properties(device_test tensor_test parameter_test module_test linear_layer_test
+    PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)

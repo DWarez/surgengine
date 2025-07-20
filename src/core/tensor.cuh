@@ -85,30 +85,46 @@ public:
 
 template <typename T> using StoragePtr = std::shared_ptr<RefCountedStorage<T>>;
 
-template <typename T> class Tensor {
-private:
-  StoragePtr<T> storage_;
-  std::vector<int> shape_;
+class TensorShape {
+  std::vector<int> dims_;
   std::vector<int> strides_;
-  size_t offset_;
 
+private:
   void compute_strides() {
-    strides_.resize(shape_.size());
-    if (shape_.empty())
+    strides_.resize(dims_.size());
+    if (dims_.empty())
       return;
 
     strides_.back() = 1;
-    for (int i = shape_.size() - 2; i >= 0; --i) {
-      strides_[i] = strides_[i + 1] * shape_[i + 1];
+    for (int i = dims_.size() - 2; i >= 0; --i) {
+      strides_[i] = strides_[i + 1] * dims_[i + 1];
     }
   }
 
-  size_t total_elements() const {
+public:
+  TensorShape(const std::vector<int> &shape) : dims_(shape) {
+    compute_strides();
+  }
+
+  TensorShape(const std::vector<int> &shape, const std::vector<int> &strides)
+      : dims_(shape), strides_(strides) {}
+
+  const std::vector<int> &dims() const { return dims_; }
+  const std::vector<int> &strides() const { return strides_; }
+
+  size_t numel() const {
     size_t total = 1;
-    for (int dim : shape_)
+    for (int dim : dims_)
       total *= dim;
     return total;
   }
+};
+
+template <typename T> class Tensor {
+private:
+  StoragePtr<T> storage_;
+  TensorShape shape_;
+  size_t offset_;
 
   static void copy_data_between_devices(const float *src, float *dst,
                                         size_t count, const Device &src_device,
@@ -141,37 +157,44 @@ private:
 public:
   Tensor(const std::vector<int> &shape, const Device &device = Device::cpu())
       : shape_(shape), offset_(0) {
-    compute_strides();
-    size_t total = total_elements();
+    size_t total = shape_.numel();
+    storage_ = std::make_shared<RefCountedStorage<T>>(total, device);
+  }
+
+  Tensor(const TensorShape &shape, const Device &device = Device::cpu())
+      : shape_(shape), offset_(0) {
+    size_t total = shape_.numel();
     storage_ = std::make_shared<RefCountedStorage<T>>(total, device);
   }
 
   Tensor(StoragePtr<T> storage, const std::vector<int> &shape,
          const std::vector<int> &strides, size_t offset = 0)
-      : storage_(storage), shape_(shape), strides_(strides), offset_(offset) {}
+      : shape_(shape, strides), offset_(offset) {
+    shape_ = TensorShape(shape, strides);
+  }
 
   T *data() { return storage_ ? storage_->data() + offset_ : nullptr; }
   const T *data() const {
     return storage_ ? storage_->data() + offset_ : nullptr;
   }
 
-  const std::vector<int> &shape() const { return shape_; }
-  const std::vector<int> &strides() const { return strides_; }
-  size_t numel() const { return total_elements(); }
+  const std::vector<int> &shape() const { return shape_.dims(); }
+  const std::vector<int> &strides() const { return shape_.strides(); }
+  size_t numel() const { return shape_.numel(); }
   Device device() const {
     return storage_ ? storage_->device() : Device::cpu();
   }
 
   bool is_contiguous() const {
-    std::vector<int> expected_strides = shape_;
+    std::vector<int> expected_strides = shape_.dims();
     if (expected_strides.empty())
       return true;
 
     expected_strides.back() = 1;
     for (int i = expected_strides.size() - 2; i >= 0; --i) {
-      expected_strides[i] = expected_strides[i + 1] * shape_[i + 1];
+      expected_strides[i] = expected_strides[i + 1] * shape_.dims()[i + 1];
     }
-    return strides_ == expected_strides;
+    return shape_.strides() == expected_strides;
   }
 
   Tensor &zero_() {
@@ -224,20 +247,20 @@ public:
   }
 
   Tensor slice(size_t dim, int start, int end) const {
-    if (dim >= shape_.size()) {
+    if (dim >= shape_.dims().size()) {
       throw std::out_of_range("Dimension out of range");
     }
 
-    if (start < 0 || end > shape_[dim] || start >= end) {
+    if (start < 0 || end > shape_.dims()[dim] || start >= end) {
       throw std::out_of_range("Slice indices out of range");
     }
 
-    std::vector<int> new_shape = shape_;
+    std::vector<int> new_shape = shape_.dims();
     new_shape[dim] = end - start;
 
-    size_t new_offset = offset_ + start * strides_[dim];
+    size_t new_offset = offset_ + start * shape_.strides()[dim];
 
-    return Tensor(storage_, new_shape, strides_, new_offset);
+    return Tensor(storage_, new_shape, shape_.strides(), new_offset);
   }
 
   static Tensor zeros(const std::vector<int> &shape,
@@ -297,11 +320,11 @@ private:
   void print_tensor_data(std::ostream &os, const std::vector<T> &data) const {
     const int max_elements = 6;
 
-    if (shape_.size() == 0) {
+    if (shape_.dims().size() == 0) {
       os << format_value(data[0]);
-    } else if (shape_.size() == 1) {
+    } else if (shape_.dims().size() == 1) {
       print_1d(os, data, max_elements);
-    } else if (shape_.size() == 2) {
+    } else if (shape_.dims().size() == 2) {
       print_2d(os, data, max_elements);
     } else {
       print_nd(os, data, max_elements);
@@ -311,7 +334,7 @@ private:
   void print_1d(std::ostream &os, const std::vector<T> &data,
                 int max_elements) const {
     os << "[";
-    int total_elements = shape_[0];
+    int total_elements = shape_.dims()[0];
 
     if (total_elements <= max_elements) {
       for (int i = 0; i < total_elements; ++i) {
@@ -336,8 +359,8 @@ private:
 
   void print_2d(std::ostream &os, const std::vector<T> &data,
                 int max_elements) const {
-    int rows = shape_[0];
-    int cols = shape_[1];
+    int rows = shape_.dims()[0];
+    int cols = shape_.dims()[1];
 
     os << "[" << std::endl;
 
@@ -433,9 +456,9 @@ public:
   friend std::ostream &operator<<(std::ostream &os, const Tensor<T> &tensor) {
     os << "Tensor(";
     os << "shape=[";
-    for (size_t i = 0; i < tensor.shape_.size(); ++i) {
-      os << tensor.shape_[i];
-      if (i < tensor.shape_.size() - 1)
+    for (size_t i = 0; i < tensor.shape_.dims().size(); ++i) {
+      os << tensor.shape_.dims()[i];
+      if (i < tensor.shape_.dims().size() - 1)
         os << ", ";
     }
     os << "], ";

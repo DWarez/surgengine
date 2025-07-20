@@ -1,58 +1,44 @@
-# Include directories
-set(TENSOR_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR})
-
-# Source files
-set(CPP_SOURCES
-    main.cpp
+# Collect all source files
+file(GLOB_RECURSE TENSOR_SOURCES
+    "core/*.cpp"
+    "core/*.cu"
+    "core/nn/*.cpp"
+    "core/nn/*.cu"
+    "kernels/*.cu"
+    "utils/*.cpp"
+    "utils/*.cu"
 )
 
-set(CUDA_SOURCES
-    kernels/fill_kernel.cu
-)
+# Create the tensor library
+add_library(tensor ${TENSOR_SOURCES})
 
-# Create static library
-add_library(tensor STATIC ${CUDA_SOURCES})
-
-# Set properties for the library
+# Set CUDA properties
 set_target_properties(tensor PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
-    POSITION_INDEPENDENT_CODE ON
+    CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
 
-# Link libraries to tensor
+# Include directories
+target_include_directories(tensor PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/nn
+    ${CMAKE_CURRENT_SOURCE_DIR}/kernels
+    ${CMAKE_CURRENT_SOURCE_DIR}/utils
+)
+
+# Link required libraries
 target_link_libraries(tensor
     CUDA::cudart
     CUDA::cublas
     ${CBLAS_LIBRARIES}
     ${BLAS_LIBRARIES}
-)
-
-# Include directories for tensor
-target_include_directories(tensor PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/core
-    ${CMAKE_CURRENT_SOURCE_DIR}/kernels
-)
-
-# Create main executable
-add_executable(surgengine ${CPP_SOURCES})
-
-# Link libraries to main executable
-target_link_libraries(surgengine
-    tensor
-    CUDA::cudart
-    Boost::system
-    Boost::filesystem
     nlohmann_json::nlohmann_json
-    ${CBLAS_LIBRARIES}
-    ${BLAS_LIBRARIES}
-    CUDA::cublas
 )
 
-# Include directories for main executable
-target_include_directories(surgengine PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
+# Create the main executable (if needed)
+add_executable(surgengine main.cpp)
+target_link_libraries(surgengine tensor)
+set_target_properties(surgengine PROPERTIES
+    CUDA_SEPARABLE_COMPILATION ON
 )
-
-# Install the executable
-install(TARGETS surgengine DESTINATION bin)
