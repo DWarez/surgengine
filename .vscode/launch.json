@@ -2,24 +2,19 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug LinearLayer Test",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/builddir/tests/linear_layer_test",
-            "args": ["--gtest_filter=LinearLayerTest.CUDAForward"],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
-            "environment": [],
-            "externalConsole": false,
-            "MIMode": "gdb",
-            "miDebuggerPath": "/usr/bin/gdb",
-            "setupCommands": [
-                {
-                    "description": "Enable pretty-printing",
-                    "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
-                }
-            ]
+    "name": "Debug Simple",
+    "type": "cppdbg", 
+    "request": "launch",
+    "program": "${workspaceFolder}/build/tests/tensor_test",
+    "args": ["--gtest_filter=TensorTest.ViewReshape"],
+    "stopAtEntry": true,
+    "cwd": "${workspaceFolder}",
+    "MIMode": "gdb",
+    "setupCommands": [
+        {
+            "text": "set stop-on-solib-events 0"
         }
+    ]
+}
     ]
 }

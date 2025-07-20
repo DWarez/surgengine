@@ -169,9 +169,7 @@ public:
 
   Tensor(StoragePtr<T> storage, const std::vector<int> &shape,
          const std::vector<int> &strides, size_t offset = 0)
-      : shape_(shape, strides), offset_(offset) {
-    shape_ = TensorShape(shape, strides);
-  }
+      : storage_(storage), shape_(shape, strides), offset_(offset) {}
 
   T *data() { return storage_ ? storage_->data() + offset_ : nullptr; }
   const T *data() const {

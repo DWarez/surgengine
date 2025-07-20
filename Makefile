@@ -1,6 +1,6 @@
 # Build configuration
 BUILD_DIR = build
-CMAKE_BUILD_TYPE = Release
+CMAKE_BUILD_TYPE = Debug
 CMAKE_INSTALL_PREFIX = /usr/local
 
 # Default target
@@ -16,7 +16,8 @@ build:
 
 # Build and run tests
 test: build
-	$(MAKE) -C $(BUILD_DIR) test
+	cd $(BUILD_DIR)
+	ctest --verbose
 
 # Build only tests
 build-tests: build
@@ -38,12 +39,27 @@ run-test-%: build
 	cd $(BUILD_DIR) && ./tests/$*
 
 # Debug build
-debug:
-	$(MAKE) build CMAKE_BUILD_TYPE=Debug
+debug: CMAKE_BUILD_TYPE=Debug
+debug: clean build
 
+# Force debug build (explicit)
+debug-force:
+	rm -rf $(BUILD_DIR)
+	mkdir -p $(BUILD_DIR)
+	cd $(BUILD_DIR) && cmake .. \
+		-DCMAKE_BUILD_TYPE=Debug \
+		-DCMAKE_INSTALL_PREFIX=$(CMAKE_INSTALL_PREFIX) \
+		-DCMAKE_CXX_FLAGS="-g -O0 -DDEBUG" \
+		-DCMAKE_CUDA_FLAGS="-g -G -O0"
+	$(MAKE) -C $(BUILD_DIR) -j$(shell nproc)
 
-test:
-	cd $(BUILD_DIR)
-	ctest --verbose
+# Debug a specific test
+debug-test-%: debug
+	cd $(BUILD_DIR)/tests && gdb --args ./$* --gtest_filter='*'
 
-.PHONY: all build clean install rebuild test build-tests run-test-% debug test
+# Debug a specific test case
+debug-test-case: debug
+	@echo "Usage: make debug-test-case TEST=tensor_test CASE=TensorTest.ViewReshape"
+	cd $(BUILD_DIR)/tests && gdb --args ./$(TEST) --gtest_filter=$(CASE)
+
+.PHONY: all build clean install rebuild test build-tests run-test-% debug

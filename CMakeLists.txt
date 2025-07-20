@@ -5,13 +5,18 @@ project(surgengine VERSION 1.0.0 LANGUAGES CXX CUDA)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Compiler flags
-add_compile_options(-Wno-reorder)
-
-# Debug configuration
+# IMPORTANT: Set debug flags BEFORE any add_compile_options
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    add_compile_options(-g -O0)
+    message(STATUS "Building in Debug mode with debug symbols")
+    set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -DDEBUG")
+    set(CMAKE_CUDA_FLAGS_DEBUG "-g -G -O0")
+    add_compile_definitions(DEBUG)
+else()
+    message(STATUS "Building in Release mode")
 endif()
+
+# Compiler flags (remove the -Wno-reorder for now to test)
+# add_compile_options(-Wno-reorder)
 
 # CUDA architecture
 set(CMAKE_CUDA_ARCHITECTURES 89)
